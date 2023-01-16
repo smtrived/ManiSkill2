@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "mani_skill2"
+project = "ManiSkill2"
 copyright = "2023, ManiSkill2 Contributors"
 author = "ManiSkill2 Contributors"
 release = "0.4.0"
@@ -17,7 +17,8 @@ release = "0.4.0"
 extensions = [
     "sphinx_rtd_theme",
     "sphinx.ext.autodoc",
-    "sphinx.ext.mathjax",
+    # "sphinx.ext.mathjax",
+    "sphinx.ext.imgmath",
     "sphinx_copybutton",
     "myst_parser",
 ]
