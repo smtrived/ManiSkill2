@@ -1,9 +1,9 @@
-.. mani_skill2 documentation master file, created by
+.. ManiSkill2 documentation master file, created by
    sphinx-quickstart on Fri Jan  6 18:07:26 2023.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to mani_skill2's documentation!
+Welcome to ManiSkill2's documentation!
 =======================================
 
 .. toctree::

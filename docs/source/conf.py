@@ -17,8 +17,7 @@ release = "0.4.0"
 extensions = [
     "sphinx_rtd_theme",
     "sphinx.ext.autodoc",
-    # "sphinx.ext.mathjax",
-    "sphinx.ext.imgmath",
+    "sphinx.ext.mathjax",
     "sphinx_copybutton",
     "myst_parser",
 ]
