@@ -11,7 +11,7 @@ from mani_skill2.utils.sapien_utils import hex2rgba, look_at, vectorize_pose
 from .base_env import StationaryManipulationEnv
 
 
-@register_env("PegInsertionSide-v0", max_episode_steps=200)
+@register_env("PegInsertionSide-v1", max_episode_steps=200)
 class PegInsertionSideEnv(StationaryManipulationEnv):
     _clearance = 0.003
 
