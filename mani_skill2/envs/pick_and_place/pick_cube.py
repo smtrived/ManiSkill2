@@ -122,7 +122,7 @@ class PickCubeEnv(StationaryManipulationEnv):
         super().set_state(state[:-3])
 
 
-@register_env("LiftCube-v0", max_episode_steps=200)
+@register_env("LiftCube-v1", max_episode_steps=200)
 class LiftCubeEnv(PickCubeEnv):
     """Lift the cube to a certain height."""
 
