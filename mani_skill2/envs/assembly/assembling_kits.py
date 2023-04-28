@@ -72,11 +72,14 @@ class AssemblingKitsEnv(StationaryManipulationEnv):
         kit_path = str(self._kit_dir / f"{self.kit_id}.obj")
         builder.add_nonconvex_collision_from_file(kit_path)
 
-        material = self._renderer.create_material()
-        material.set_base_color([0.27807487, 0.20855615, 0.16934046, 1.0])
-        material.metallic = 0.0
-        material.roughness = 0.5
-        material.specular = 0.0
+        if self._renderer is not None:
+            material = self._renderer.create_material()
+            material.set_base_color([0.27807487, 0.20855615, 0.16934046, 1.0])
+            material.metallic = 0.0
+            material.roughness = 0.5
+            material.specular = 0.0
+        else:
+            material = None
         builder.add_visual_from_file(kit_path, material=material)
 
         return builder.build_static(name="kit")
@@ -90,11 +93,14 @@ class AssemblingKitsEnv(StationaryManipulationEnv):
             str(collision_path), scale=self.object_scale
         )
 
-        material = self._renderer.create_material()
-        material.set_base_color(self.color[self._episode_rng.choice(len(self.color))])
-        material.metallic = 0.0
-        material.roughness = 0.1
-        material.specular = 0.0
+        if self._renderer is not None:
+            material = self._renderer.create_material()
+            material.set_base_color(self.color[self._episode_rng.choice(len(self.color))])
+            material.metallic = 0.0
+            material.roughness = 0.1
+            material.specular = 0.0
+        else:
+            material = None
         builder.add_visual_from_file(
             str(visual_path), scale=self.object_scale, material=material
         )

@@ -34,7 +34,7 @@ class StationaryManipulationEnv(BaseEnv):
         static=False,
         render_material: sapien.RenderMaterial = None,
     ):
-        if render_material is None:
+        if render_material is None and self._renderer is not None:
             render_material = self._renderer.create_material()
             render_material.set_base_color(np.hstack([color, 1.0]))
 

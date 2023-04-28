@@ -24,21 +24,27 @@ class PlugChargerEnv(StationaryManipulationEnv):
         builder = self._scene.create_actor_builder()
 
         # peg
-        mat = self._renderer.create_material()
-        mat.set_base_color(hex2rgba("#FFFFFF"))
-        mat.metallic = 1.0
-        mat.roughness = 0.0
-        mat.specular = 1.0
+        if self._renderer is not None:
+            mat = self._renderer.create_material()
+            mat.set_base_color(hex2rgba("#FFFFFF"))
+            mat.metallic = 1.0
+            mat.roughness = 0.0
+            mat.specular = 1.0
+        else:
+            mat = None
         builder.add_box_collision(Pose([peg_size[0], gap, 0]), peg_size)
         builder.add_box_visual(Pose([peg_size[0], gap, 0]), peg_size, material=mat)
         builder.add_box_collision(Pose([peg_size[0], -gap, 0]), peg_size)
         builder.add_box_visual(Pose([peg_size[0], -gap, 0]), peg_size, material=mat)
 
         # base
-        mat = self._renderer.create_material()
-        mat.set_base_color(hex2rgba("#FFFFFF"))
-        mat.metallic = 0.0
-        mat.roughness = 0.1
+        if self._renderer is not None:
+            mat = self._renderer.create_material()
+            mat.set_base_color(hex2rgba("#FFFFFF"))
+            mat.metallic = 0.0
+            mat.roughness = 0.1
+        else:
+            mat = None
         builder.add_box_collision(Pose([-base_size[0], 0, 0]), base_size)
         builder.add_box_visual(Pose([-base_size[0], 0, 0]), base_size, material=mat)
 
@@ -53,10 +59,13 @@ class PlugChargerEnv(StationaryManipulationEnv):
         dy = peg_size[1] + gap + sy
         dz = peg_size[2] + sz
 
-        mat = self._renderer.create_material()
-        mat.set_base_color(hex2rgba("#FFFFFF"))
-        mat.metallic = 0.0
-        mat.roughness = 0.1
+        if self._renderer is not None:
+            mat = self._renderer.create_material()
+            mat.set_base_color(hex2rgba("#FFFFFF"))
+            mat.metallic = 0.0
+            mat.roughness = 0.1
+        else:
+            mat = None
 
         poses = [
             Pose([dx, 0, dz]),
@@ -81,11 +90,14 @@ class PlugChargerEnv(StationaryManipulationEnv):
         builder.add_box_visual(pose, half_size, material=mat)
 
         # Add dummy visual for hole
-        mat = self._renderer.create_material()
-        mat.set_base_color(hex2rgba("#DBB539"))
-        mat.metallic = 1.0
-        mat.roughness = 0.0
-        mat.specular = 1.0
+        if self._renderer is not None:
+            mat = self._renderer.create_material()
+            mat.set_base_color(hex2rgba("#DBB539"))
+            mat.metallic = 1.0
+            mat.roughness = 0.0
+            mat.specular = 1.0
+        else:
+            mat = None
         pose = Pose([-receptacle_size[0], -(gap * 0.5 + peg_size[1]), 0])
         half_size = [receptacle_size[0], peg_size[1], peg_size[2]]
         builder.add_box_visual(pose, half_size, material=mat)

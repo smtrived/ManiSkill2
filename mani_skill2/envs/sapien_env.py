@@ -123,6 +123,8 @@ class BaseEnv(gym.Env):
         elif self._renderer_type == "client":
             self._renderer = sapien.RenderClient(**renderer_kwargs)
             # TODO(jigu): add `set_log_level` for RenderClient?
+        elif self._renderer_type == "none":
+            self._renderer = None
         else:
             raise NotImplementedError(self._renderer_type)
 
@@ -357,8 +359,9 @@ class BaseEnv(gym.Env):
         self._load_agent()
         self._load_actors()
         self._load_articulations()
-        self._setup_cameras()
-        self._setup_lighting()
+        if self._renderer is not None:
+            self._setup_cameras()
+            self._setup_lighting()
 
         if self._viewer is not None:
             self._setup_viewer()
@@ -370,7 +373,7 @@ class BaseEnv(gym.Env):
         self._load_background()
 
     def _add_ground(self, altitude=0.0, render=True):
-        if render:
+        if render and self._renderer is not None:
             rend_mtl = self._renderer.create_material()
             rend_mtl.base_color = [0.06, 0.08, 0.12, 1]
             rend_mtl.metallic = 0.0

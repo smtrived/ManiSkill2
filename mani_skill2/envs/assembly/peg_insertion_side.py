@@ -39,11 +39,14 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
             Pose([0, 0, -offset + half_center[1]]),
         ]
 
-        mat = self._renderer.create_material()
-        mat.set_base_color(hex2rgba("#FFD289"))
-        mat.metallic = 0.0
-        mat.roughness = 0.5
-        mat.specular = 0.5
+        if self._renderer is not None:
+            mat = self._renderer.create_material()
+            mat.set_base_color(hex2rgba("#FFD289"))
+            mat.metallic = 0.0
+            mat.roughness = 0.5
+            mat.specular = 0.5
+        else:
+            mat = None
 
         for (half_size, pose) in zip(half_sizes, poses):
             builder.add_box_collision(pose, half_size)
@@ -61,11 +64,14 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         builder.add_box_collision(half_size=[length, radius, radius])
 
         # peg head
-        mat = self._renderer.create_material()
-        mat.set_base_color(hex2rgba("#EC7357"))
-        mat.metallic = 0.0
-        mat.roughness = 0.5
-        mat.specular = 0.5
+        if self._renderer is not None:
+            mat = self._renderer.create_material()
+            mat.set_base_color(hex2rgba("#EC7357"))
+            mat.metallic = 0.0
+            mat.roughness = 0.5
+            mat.specular = 0.5
+        else:
+            mat = None
         builder.add_box_visual(
             Pose([length / 2, 0, 0]),
             half_size=[length / 2, radius, radius],
@@ -73,11 +79,14 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         )
 
         # peg tail
-        mat = self._renderer.create_material()
-        mat.set_base_color(hex2rgba("#EDF6F9"))
-        mat.metallic = 0.0
-        mat.roughness = 0.5
-        mat.specular = 0.5
+        if self._renderer is not None:
+            mat = self._renderer.create_material()
+            mat.set_base_color(hex2rgba("#EDF6F9"))
+            mat.metallic = 0.0
+            mat.roughness = 0.5
+            mat.specular = 0.5
+        else:
+            mat = None
         builder.add_box_visual(
             Pose([-length / 2, 0, 0]),
             half_size=[length / 2, radius, radius],

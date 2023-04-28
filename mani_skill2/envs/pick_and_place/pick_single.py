@@ -521,12 +521,15 @@ class PickSingleEGADEnv(PickSingleEnv):
                 )
 
     def _load_model(self):
-        mat = self._renderer.create_material()
-        color = self._episode_rng.uniform(0.2, 0.8, 3)
-        color = np.hstack([color, 1.0])
-        mat.set_base_color(color)
-        mat.metallic = 0.0
-        mat.roughness = 0.1
+        if self._renderer is not None:
+            mat = self._renderer.create_material()
+            color = self._episode_rng.uniform(0.2, 0.8, 3)
+            color = np.hstack([color, 1.0])
+            mat.set_base_color(color)
+            mat.metallic = 0.0
+            mat.roughness = 0.1
+        else:
+            mat = None
 
         self.obj = build_actor_egad(
             self.model_id,
