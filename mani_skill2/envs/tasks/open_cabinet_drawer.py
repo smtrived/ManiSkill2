@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 import numpy as np
 import sapien
 import torch
+from transforms3d.euler import euler2quat
 
 from mani_skill2.envs.sapien_env import BaseEnv
 from mani_skill2.sensors.camera import CameraConfig
@@ -82,55 +83,102 @@ class OpenCabinetDrawerEnv(BaseEnv):
             cs.set_collision_groups(cg)
 
     def _load_cabinets(self, joint_types: List[str]):
-        rand_idx = torch.randperm(len(self.all_model_ids))
-        model_ids = self.all_model_ids[rand_idx]
-        model_ids = np.concatenate(
-            [model_ids] * np.ceil(self.num_envs / len(self.all_model_ids)).astype(int)
-        )[: self.num_envs]
-        cabinets = []
-        self.cabinet_heights = []
-        handle_links: List[List[Link]] = []
-        handle_links_meshes: List[List[Any]] = []
-        for i, model_id in enumerate(model_ids):
-            scene_mask = np.zeros(self.num_envs, dtype=bool)
-            scene_mask[i] = True
-            cabinet, metadata = build_preprocessed_partnet_mobility_articulation(
-                self._scene, model_id, name=f"{model_id}-{i}", scene_mask=scene_mask
+        with torch.device(self.device):
+            rand_idx = torch.randperm(len(self.all_model_ids))
+            model_ids = self.all_model_ids[rand_idx.cpu().numpy()]
+            model_ids = np.concatenate(
+                [model_ids]
+                * np.ceil(self.num_envs / len(self.all_model_ids)).astype(int)
+            )[: self.num_envs]
+            cabinets = []
+            self.cabinet_heights = []
+            handle_links: List[List[Link]] = []
+            handle_links_meshes: List[List[Any]] = []
+            self.cabinet_back_pos = []
+            for i, model_id in enumerate(model_ids):
+                scene_mask = np.zeros(self.num_envs, dtype=bool)
+                scene_mask[i] = True
+                cabinet, metadata = build_preprocessed_partnet_mobility_articulation(
+                    self._scene, model_id, name=f"{model_id}-{i}", scene_mask=scene_mask
+                )
+                # TODO (stao): since we processed the assets we know that the bounds[0, 1] is the actual height to set the object at
+                # but in future we will store a visual origin offset so we can place them by using the actual bbox height / 2
+                # TODO (stao): ask fanbo, it seems loading links does not load the pose correclty on the cpu object?
+                self.cabinet_heights.append((-metadata.bbox.bounds[0, 1]))
+                self.cabinet_back_pos.append((-metadata.bbox.bounds[0, 0]))
+                handle_links.append([])
+                handle_links_meshes.append([])
+                # NOTE (stao): interesting future project similar to some kind of quality diversity is accelerating policy learning by dynamically shifting distribution of handles/cabinets being trained on.
+                for link, joint in zip(cabinet.links, cabinet.joints):
+                    if joint.type[0] in joint_types:
+                        handle_links[-1].append(link)
+                        handle_links_meshes[-1].append(
+                            link.generate_mesh(
+                                lambda _, x: "handle" in x.name, "handle"
+                            )[0]
+                        )
+                cabinets.append(cabinet)
+
+            # we can merge different articulations with different degrees of freedoms as done below
+            # allowing you to manage all of them under one object and retrieve data like qpos, pose, etc. all together
+            # and with high performance. Note that some properties such as qpos and qlimits are now padded.
+            self.cabinet = Articulation.merge(cabinets, name="cabinet")
+
+            self.cabinet_metadata = metadata
+            # list of list of links and meshes. handle_links[i][j] is the jth handle of the ith cabinet
+            self.handle_links = handle_links
+            self.handle_links_meshes = handle_links_meshes
+
+            self.handle_link_goal = build_sphere(
+                self._scene,
+                radius=0.05,
+                color=[0, 1, 0, 1],
+                name="handle_link_goal",
+                body_type="kinematic",
+                add_collision=False,
             )
-            # TODO (stao): since we processed the assets we know that the bounds[0, 1] is the actual height to set the object at
-            # but in future we will store a visual origin offset so we can place them by using the actual bbox height / 2
-            # TODO (stao): ask fanbo, it seems loading links does not load the pose correclty on the cpu object?
-            self.cabinet_heights.append((-metadata.bbox.bounds[0, 1]))
-            handle_links.append([])
-            handle_links_meshes.append([])
-            # NOTE (stao): interesting future project similar to some kind of quality diversity is accelerating policy learning by dynamically shifting distribution of handles/cabinets being trained on.
-            for link, joint in zip(cabinet.links, cabinet.joints):
-                if joint.type[0] in joint_types:
-                    handle_links[-1].append(link)
-                    handle_links_meshes[-1].append(
-                        link.generate_mesh(lambda _, x: "handle" in x.name, "handle")[0]
-                    )
-            cabinets.append(cabinet)
+            self._hidden_objects.append(self.handle_link_goal)
 
-        # we can merge different articulations with different degrees of freedoms as done below
-        # allowing you to manage all of them under one object and retrieve data like qpos, pose, etc. all together
-        # and with high performance. Note that some properties such as qpos and qlimits are now padded.
-        self.cabinet = Articulation.merge(cabinets, name="cabinet")
+            KITCHEN_ASSET_DIR = "mani_skill2/utils/scene_builder/kitchen/assets"
+            # rest of stuff below is just populating the scene to make it a little nicer
+            actor_builder = self._scene.create_actor_builder()
+            wall_mtl = sapien.render.RenderMaterial()
+            wall_mtl.base_color = [32 / 255, 67 / 255, 80 / 255, 1]
+            wall_mtl.metallic = 0.0
+            wall_mtl.roughness = 0.9
+            wall_mtl.specular = 0.1
+            wall_mtl.diffuse_texture = sapien.render.RenderTexture2D(
+                KITCHEN_ASSET_DIR + "/brick_wall_02_diff_1k.jpg"
+            )
+            actor_builder.add_visual_from_file(
+                str(KITCHEN_ASSET_DIR + "/tiled_wall.obj"),
+                scale=(3, 3, 2),  # kitchens are usually about 2.5 to 3 meters tall
+                material=wall_mtl,
+                pose=sapien.Pose(q=euler2quat(0, np.pi / 2, 0)),
+            )
+            # actor_builder.add_box_visual(half_size=(0.025, 2, 4),material=wall_mtl,pose=sapien.Pose(q=euler2quat(0, np.pi / 2, 0)),)
+            self.back_wall_xyz = torch.zeros((self.num_envs, 3))
+            self.back_wall_xyz[:, 0] = torch.tensor(self.cabinet_back_pos)
+            self.back_wall_xyz[:, 2] = 1.5
+            actor_builder.initial_pose = Pose.create_from_pq(p=self.back_wall_xyz)
+            self.back_wall = actor_builder.build_static("back-wall")
 
-        self.cabinet_metadata = metadata
-        # list of list of links and meshes. handle_links[i][j] is the jth handle of the ith cabinet
-        self.handle_links = handle_links
-        self.handle_links_meshes = handle_links_meshes
-
-        self.handle_link_goal = build_sphere(
-            self._scene,
-            radius=0.05,
-            color=[0, 1, 0, 1],
-            name="handle_link_goal",
-            body_type="kinematic",
-            add_collision=False,
-        )
-        self._hidden_objects.append(self.handle_link_goal)
+            # builder = self._scene.create_actor_builder()
+            # builder.add_visual_from_file(
+            #     str(KITCHEN_ASSET_DIR / "tiled_floor.obj"),
+            #     scale=(3, 6, 2),
+            #     pose=Pose(p=[0, 0, altitude], q=euler.euler2quat(0, np.pi, 0)),
+            #     material=rend_mtl,
+            # )
+            # builder.add_plane_collision(
+            #     Pose(p=[0, 0, altitude], q=[0.7071068, 0, -0.7071068, 0]),
+            # )
+            # builder.set_physx_body_type("static")
+            # ground = builder.build()
+            # ground.set_pose(Pose([(0.295 - 2.5) / 2, (4.5 - 1.37) / 2, 0]))
+            # ground.name = "ground"
+            # shadow = True  # self.enable_shadow
+            # scene.set_ambient_light([0.3, 0.3, 0.3])
 
     def _initialize_actors(self):
         with torch.device(self.device):

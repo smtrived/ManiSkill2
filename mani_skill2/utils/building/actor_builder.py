@@ -72,7 +72,7 @@ class ActorBuilder(SAPIENActorBuilder):
         initial_pose_np = to_numpy(initial_pose.raw_pose)
 
         entities = []
-
+        i = 0
         for scene_idx, sub_scene in enumerate(self.scene.sub_scenes):
             if self.scene_mask is not None and self.scene_mask[scene_idx] == False:
                 continue
@@ -86,6 +86,7 @@ class ActorBuilder(SAPIENActorBuilder):
                 entity.pose = to_sapien_pose(initial_pose_np[i])
             sub_scene.add_entity(entity)
             entities.append(entity)
+            i += 1
 
         actor = Actor._create_from_entities(entities, self.scene, self.scene_mask)
 
