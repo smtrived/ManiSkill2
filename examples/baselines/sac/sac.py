@@ -18,6 +18,7 @@ import tyro
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 from mani_skill2.utils.sapien_utils import to_numpy
+from mani_skill2.utils.wrappers.flatten import FlattenActionSpaceWrapper
 from mani_skill2.utils.wrappers.record import RecordEpisode
 
 from mani_skill2.vector.wrappers.gymnasium import ManiSkillVectorEnv
@@ -44,7 +45,7 @@ class Args:
     replay_buffer_on_gpu: bool = False # TODO (stao): implement
 
     # Algorithm specific arguments
-    env_id: str = "PickCube-v0"
+    env_id: str = "PickCube-v1"
     """the environment id of the task"""
     total_timesteps: int = 100_000_000
     """total timesteps of the experiments"""
@@ -74,7 +75,7 @@ class Args:
     """Entropy regularization coefficient."""
     autotune: bool = True
     """automatic tuning of the entropy coefficient"""
-    grad_updates_per_step: int = 16
+    grad_updates_per_step: int = 32
     """number of critic gradient updates per parallel step through all environments"""
     steps_per_env: int = 1
     """number of steps each parallel env takes before performing gradient updates"""
@@ -209,15 +210,16 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    # envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
-    sapien.physx.set_gpu_memory_config(found_lost_pairs_capacity=2**26, max_rigid_patch_count=200000)
-    env_kwargs = dict(obs_mode="state", control_mode="pd_joint_delta_pos", render_mode="rgb_array", sim_freq=100, control_freq=20)
-    envs = ManiSkillVectorEnv(args.env_id, args.num_envs, env_kwargs)
+    env_kwargs = dict(obs_mode="state", control_mode="pd_ee_delta_pos", render_mode="rgb_array")
+    envs = gym.make(args.env_id, num_envs=args.num_envs, **env_kwargs)
     eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, **env_kwargs)
+    if isinstance(envs.action_space, gym.spaces.Dict):
+        envs = FlattenActionSpaceWrapper(envs)
+        eval_envs = FlattenActionSpaceWrapper(eval_envs)
     if args.capture_video:
         eval_envs = RecordEpisode(eval_envs, output_dir=f"runs/{run_name}/videos", save_trajectory=False, video_fps=30)
-    eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, env_kwargs)
-
+    envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=False, **env_kwargs)
+    eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=True, **env_kwargs)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     max_action = float(envs.single_action_space.high[0])
@@ -263,7 +265,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             eval_done = False
             while not eval_done:
                 with torch.no_grad():
-                    eval_obs, _, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
+                    eval_obs, _, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_action(eval_obs)[0])
                 if eval_truncations.any():
                     eval_done = True
             info = eval_infos["final_info"]
@@ -271,7 +273,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             print(f"eval_episodic_return={episodic_return}")
             writer.add_scalar("charts/eval_success_rate", info["success"].float().mean().cpu().numpy(), global_step)
             writer.add_scalar("charts/eval_episodic_return", episodic_return, global_step)
-            writer.add_scalar("charts/eval_episodic_length", info["elapsed_steps"], global_step)
+            writer.add_scalar("charts/eval_episodic_length", info["elapsed_steps"].float().mean().cpu().numpy(), global_step)
 
         for _ in range(args.steps_per_env):
             # ALGO LOGIC: put action logic here
@@ -285,29 +287,27 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             next_obs, rewards, terminations, truncations, infos = envs.step(actions)
             global_step += envs.num_envs
             dones = torch.logical_or(terminations, truncations)
-            assert dones.any() == dones.all()
 
             # TRY NOT TO MODIFY: record rewards for plotting purposes
             if "final_info" in infos: # this means all parallel envs truncated
+                # TODO report rolling average of last 10 episodes?
                 info = infos["final_info"]
-                episodic_return = info['episode']['r'].mean().cpu().numpy()
-                print(f"global_step={global_step}, episodic_return={episodic_return}")
-                writer.add_scalar("charts/success_rate", info["success"].float().mean().cpu().numpy(), global_step)
+                done_mask = info["_final_info"]
+                episodic_return = info['episode']['r'][done_mask].mean().cpu().numpy()
+                writer.add_scalar("charts/success_rate", info["success"][done_mask].float().mean().cpu().numpy(), global_step)
                 writer.add_scalar("charts/episodic_return", episodic_return, global_step)
-                writer.add_scalar("charts/episodic_length", info["elapsed_steps"], global_step)
+                writer.add_scalar("charts/episodic_length", info["elapsed_steps"][done_mask].float().mean().cpu().numpy(), global_step)
 
             # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
-            real_next_obs = next_obs.clone()
-            if dones.any():
-                real_next_obs = infos["final_observation"].clone()
+            real_next_obs = infos["real_next_obs"].clone()
             if not args.replay_buffer_on_gpu:
                 real_next_obs = real_next_obs.cpu().numpy()
                 obs = obs.cpu().numpy()
                 actions = actions.cpu().numpy()
                 rewards = rewards.cpu().numpy()
                 dones = dones.cpu().numpy()
-                infos = to_numpy(infos)
-            rb.add(obs, real_next_obs, actions, rewards, dones, infos)
+            # TODO (stao): we should remove the dependency on SB3
+            rb.add(obs, real_next_obs, actions, rewards, dones, None)
 
             # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
             obs = next_obs
@@ -351,7 +351,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                     if args.autotune:
                         with torch.no_grad():
                             _, log_pi, _ = actor.get_action(data.observations)
-                        alpha_loss = (-log_alpha.exp() * (log_pi + target_entropy)).mean()
+                        # alpha_loss = (-log_alpha.exp() * (log_pi + target_entropy)).mean()
+                        # why is log alpha taking exp here?
+                        alpha_loss = (-log_alpha * (log_pi + target_entropy)).mean()
 
                         a_optimizer.zero_grad()
                         alpha_loss.backward()
