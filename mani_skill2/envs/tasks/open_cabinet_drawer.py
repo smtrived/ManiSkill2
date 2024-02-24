@@ -87,6 +87,7 @@ class OpenCabinetDrawerEnv(BaseEnv):
         model_ids = np.concatenate(
             [model_ids] * np.ceil(self.num_envs / len(self.all_model_ids)).astype(int)
         )[: self.num_envs]
+        model_ids = ["1054"]
         cabinets = []
         self.cabinet_heights = []
         handle_links: List[List[Link]] = []
@@ -213,10 +214,10 @@ class OpenCabinetDrawerEnv(BaseEnv):
                 self.agent.reset(qpos)
                 self.agent.robot.set_pose(sapien.Pose([-1.5, 0, 0]))
 
-            # NOTE (stao): This is a temporary work around for the issue where the cabinet drawers/doors might open themselves on the first step. It's unclear why this happens on GPU sim only atm.
-            self._scene._gpu_apply_all()
-            self._scene.px.step()
-            self.cabinet.set_qpos(qlimits[:, :, 0])
+            # # NOTE (stao): This is a temporary work around for the issue where the cabinet drawers/doors might open themselves on the first step. It's unclear why this happens on GPU sim only atm.
+            # self._scene._gpu_apply_all()
+            # self._scene.px.step()
+            # self.cabinet.set_qpos(qlimits[:, :, 0])
 
     ### Useful properties ###
 
