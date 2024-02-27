@@ -403,11 +403,11 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                 close_enough_reward += ee_still_rew
 
                 # pick reward
-                grasp_rew = info["is_grasped"][robot_close_enough]
+                grasp_rew = 2 * info["is_grasped"][robot_close_enough]
                 close_enough_reward += grasp_rew
 
                 # success reward
-                success_rew = info["success"][robot_close_enough]
+                success_rew = 3 * info["success"][robot_close_enough]
                 close_enough_reward += success_rew
 
 
@@ -431,7 +431,7 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
 
                 # place reward
                 ee_to_rest_dist = torch.norm(tcp_pos[is_grasped] - goal_pos[is_grasped], dim=1)
-                place_rew = (1 - torch.tanh(3 * ee_to_rest_dist))
+                place_rew = 5 * (1 - torch.tanh(3 * ee_to_rest_dist))
                 is_grasped_reward += place_rew
 
                 # penalty for base moving or rotating too much
@@ -473,7 +473,7 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
     def compute_normalized_dense_reward(
         self, obs: Any, action: torch.Tensor, info: Dict
     ):
-        max_reward = 12.0
+        max_reward = 19.0
         return self.compute_dense_reward(obs=obs, action=action, info=info) / max_reward
     
     # -------------------------------------------------------------------------------------------------
