@@ -410,6 +410,13 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                 success_rew = 3 * info["success"][robot_close_enough]
                 close_enough_reward += success_rew
 
+                # encourage arm and torso in "resting" orientation
+                arm_to_resting_diff = torch.norm(
+                    self.agent.robot.qpos[..., 3:-2][robot_close_enough] - self.agent.RESTING_QPOS[3:-2], dim=1
+                )
+                arm_resting_orientation_rew = (1 - torch.tanh(arm_to_resting_diff / 5))
+                close_enough_reward += arm_resting_orientation_rew
+
 
             if torch.any(not_grasped):
                 # penalty for torso moving up and down too much
@@ -438,13 +445,6 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                 bqvel = self.agent.robot.qvel[..., :3][is_grasped]
                 base_still_rew = (1 - torch.tanh(torch.norm(bqvel, dim=1)))
                 is_grasped_reward += base_still_rew
-
-                # encourage arm and torso in "resting" orientation
-                arm_to_resting_diff = torch.norm(
-                    self.agent.robot.qpos[..., 3:-2][is_grasped] - self.agent.RESTING_QPOS[3:-2], dim=1
-                )
-                arm_resting_orientation_rew = (1 - torch.tanh(arm_to_resting_diff / 5))
-                is_grasped_reward += arm_resting_orientation_rew
 
 
             if torch.any(ee_rest):
