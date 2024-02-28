@@ -359,10 +359,10 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
             robot_close_enough = ~robot_too_far
             close_enough_reward = torch.zeros_like(reward[robot_close_enough])
 
-            not_grasped = robot_close_enough & ~info['is_grasped']
+            not_grasped = robot_close_enough & ~info["is_grasped"].squeeze(-1)
             not_grasped_reward = torch.zeros_like(reward[not_grasped])
 
-            is_grasped = robot_close_enough & info['is_grasped']
+            is_grasped = robot_close_enough & info["is_grasped"].squeeze(-1)
             is_grasped_reward = torch.zeros_like(reward[is_grasped])
 
             ee_rest = (
@@ -403,7 +403,7 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                 close_enough_reward += ee_still_rew
 
                 # pick reward
-                grasp_rew = 2 * info["is_grasped"][robot_close_enough]
+                grasp_rew = 2 * info["is_grasped"].squeeze(-1)[robot_close_enough]
                 close_enough_reward += grasp_rew
 
                 # success reward
