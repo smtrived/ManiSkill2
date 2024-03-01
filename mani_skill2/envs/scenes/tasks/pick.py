@@ -80,10 +80,8 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
 
         # NOTE (arth): task plan length and order checking left to SequentialTaskEnv
         tp0 = task_plans[0]
-        assert (
-            len(tp0) == 1 and isinstance(tp0[0], PickSubtask),
+        assert len(tp0) == 1 and isinstance(tp0[0], PickSubtask), \
             "Task plans for Pick training must be one PickSubtask long"
-        )
 
         # randomization vals
         self.randomize_arm = randomize_arm
@@ -105,20 +103,9 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
     # -------------------------------------------------------------------------------------------------
     # TODO (arth): better version w/ new collision API
     # -------------------------------------------------------------------------------------------------
-
-    def get_info(self):
-        info = super().get_info()
-
-        force = self._get_robot_force()
-        info['robot_force'] = force
-
-        self.robot_cumulative_force += force
-        info['robot_cumulative_force'] = self.robot_cumulative_force
-
-        return info
     
     def reset(self, *args, **kwargs):
-        self.robot_cumulative_force = 0
+        self.robot_cumulative_force = torch.zeros(self.num_envs)
         return super().reset(*args, **kwargs)
 
     # -------------------------------------------------------------------------------------------------
@@ -149,9 +136,11 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
             # run reconfiguration
             super().reconfigure()
 
+            self.scene_builder.disable_fetch_ground_collisions()
+
             # links and entities for force tracking
             force_rew_ignore_links = [
-                self.agent.finger1_link, self.agent.finger2_link, self.agent.tcp
+                self.agent.finger1_link, self.agent.finger2_link, self.agent.tcp,
             ]
             self.force_articulation_link_ids = [
                 link.name for link in self.agent.robot.get_links() if link not in force_rew_ignore_links
@@ -209,16 +198,20 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                     ).norm(dim=-1).sum(dim=-1)
 
                 for i in torch.where(slrs_within_range & (robot_force < 1e-3))[0]:
-                    print(i)
                     accept_spawn_loc_rots[i].append(slrs[i].cpu().numpy().tolist())
                     accept_dists[i].append(dists[i].cpu().numpy().tolist())
 
-            self.num_spawn_loc_rots = torch.tensor([len(x) for x in accept_spawn_loc_rots])
-            self.spawn_loc_rots = pad_sequence(
-                [torch.tensor(x) for x in accept_spawn_loc_rots],
-                batch_first=True, padding_value=0,
-            )
 
+            # use numpy for num bc np.random.randint allows sequence high/low
+            self.num_spawn_loc_rots = np.array([len(x) for x in accept_spawn_loc_rots])
+            self.spawn_loc_rots = pad_sequence([
+                torch.tensor(x) for x in accept_spawn_loc_rots
+            ], batch_first=True, padding_value=0,)
+            
+            self.closest_spawn_loc_rots = torch.stack([
+                self.spawn_loc_rots[i][torch.argmin(torch.tensor(x))] for i, x in enumerate(accept_dists)
+            ], dim=0)
+            
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     
 
@@ -248,17 +241,18 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
             # NOTE (arth): it is assumed that scene builder spawns agent with some qpos
             qpos = self.agent.robot.get_qpos()
             if self.randomize_loc:
-                loc_rot = self.spawn_loc_rot[torch.randint(
-                    high=len(self.spawn_loc_rot), size=(b,)
-                )]
+                idxs = np.random.randint(
+                    low=[0]*self.num_envs, high=self.num_spawn_loc_rots
+                )
+                loc_rot = self.spawn_loc_rots[:, idxs]
             else:
-                loc_rot = self.closest_spawn_loc_rot.unsqueeze(0).repeat(b, 1)
+                loc_rot = self.closest_spawn_loc_rots
             
             robot_pos = self.agent.robot.pose.p
             robot_pos[..., :2] = loc_rot[..., :2]
             self.agent.robot.set_pose(Pose.create_from_pq(p=robot_pos))
-            qpos[..., 2] = loc_rot[..., 2]
 
+            qpos[..., 2] = loc_rot[..., 2]
             if self.randomize_base:
                 # base pos
                 robot_pos = self.agent.robot.pose.p
@@ -312,8 +306,18 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
 
         # set to zero in case we use continuous task wrapper in cpu sim
         #   this way, if the termination signal is ignored, env will
-        #   still reevalate success each step
+        #   still reevaluate success each step
         self.subtask_pointer = torch.zeros_like(self.subtask_pointer)
+
+        robot_force = self.agent.robot.get_net_contact_forces(
+            self.force_articulation_link_ids
+        ).norm(dim=-1).sum(dim=-1)
+        self.robot_cumulative_force += robot_force
+
+        infos.update(
+            robot_force=robot_force,
+            robot_cumulative_force=self.robot_cumulative_force,
+        )
 
         return infos
 
@@ -455,12 +459,14 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
 
 
             # step collision penalty
-            step_col_pen = max(self.robot_force_mult * info['robot_force'], self.robot_force_penalty_min)
-            reward -= torch.tensor([step_col_pen])
+            step_col_pen = torch.clamp(
+                self.robot_force_mult * info["robot_force"], min=self.robot_force_penalty_min
+            )
+            reward -= step_col_pen
 
-            # cumulative collision penatly
-            cum_col_pen = float(info['robot_cumulative_force'] > self.robot_cumulative_force_limit)
-            reward -= torch.tensor([cum_col_pen])
+            # cumulative collision penalty
+            cum_col_pen = (info["robot_cumulative_force"] > self.robot_cumulative_force_limit).float()
+            reward -= cum_col_pen
 
         return reward
 

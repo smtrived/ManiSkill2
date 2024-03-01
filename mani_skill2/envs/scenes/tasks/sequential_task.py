@@ -89,7 +89,7 @@ class SequentialTaskEnv(SceneManipulationEnv):
     ):
 
         if "num_envs" in kwargs:
-            assert len(task_plans) == kwargs["num_envs"] or len(task_plans) == 1, \
+            assert len(task_plans) == kwargs["num_envs"], \
                 f"GPU sim requires equal number of task_plans ({len(task_plans)}) and parallel_envs ({kwargs['num_envs']})"
         else:
             assert len(task_plans) == 1, \
@@ -112,19 +112,14 @@ class SequentialTaskEnv(SceneManipulationEnv):
 
     def process_task_plan(self):
 
-        assert (
-            all_equal([len(plan) for plan in self.base_task_plans]),
-            "All parallel task plans must be the same length",
-        )
-        assert (
-            np.all(
+        assert all_equal([len(plan) for plan in self.base_task_plans]), \
+            "All parallel task plans must be the same length"
+        assert np.all(
                 [
                     all_same_type(parallel_subtasks)
                     for parallel_subtasks in zip(*self.base_task_plans)
                 ]
-            ),
-            "All parallel task plans must have same subtask types in same order",
-        )
+            ), "All parallel task plans must have same subtask types in same order"
 
         # build new merged task_plan and merge actors of parallel task plants
         self.task_plan = []
