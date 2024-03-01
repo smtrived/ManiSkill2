@@ -84,8 +84,11 @@ def build_sphere(
     name: str,
     body_type: str = "dynamic",
     add_collision: bool = True,
+    scene_mask=None,
 ):
     builder = scene.create_actor_builder()
+    if scene_mask is not None:
+        builder.set_scene_mask(scene_mask)
     if add_collision:
         builder.add_sphere_collision(
             radius=radius,

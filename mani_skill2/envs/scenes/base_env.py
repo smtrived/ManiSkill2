@@ -63,6 +63,8 @@ class SceneManipulationEnv(BaseEnv):
         self._set_episode_rng(seed)
         if options is None:
             options = dict(reconfigure=False)
+        if "reconfigure" not in options:
+            options["reconfigure"] = False
         if not self.fixed_scene:
             options["reconfigure"] = True
         if options["reconfigure"]:

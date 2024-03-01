@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 import sapien
@@ -89,14 +89,11 @@ class SequentialTaskEnv(SceneManipulationEnv):
     ):
 
         if "num_envs" in kwargs:
-            assert (
-                len(task_plans) == kwargs["num_envs"],
-                f"GPU sim requires equal number of task_plans ({len(task_plans)}) and parallel_envs ({kwargs['num_envs']})",
-            )
+            assert len(task_plans) == kwargs["num_envs"] or len(task_plans) == 1, \
+                f"GPU sim requires equal number of task_plans ({len(task_plans)}) and parallel_envs ({kwargs['num_envs']})"
         else:
-            assert (
-                len(task_plans) == 1
-            ), f"CPU sim only supports one task plan, not {(len(task_plans))}"
+            assert len(task_plans) == 1, \
+                f"CPU sim only supports one task plan, not {(len(task_plans))}"
 
         self.base_task_plans = task_plans
         self.robot_init_qpos_noise = robot_init_qpos_noise
@@ -137,16 +134,9 @@ class SequentialTaskEnv(SceneManipulationEnv):
             if isinstance(subtask0, PickSubtask):
                 parallel_subtasks: List[PickSubtask]
                 merged_obj_name = f"obj_{subtask_num}"
-
-                self.subtask_objs.append(
-                    Actor.merge(
-                        [
-                            self._get_actor(subtask.obj_id)
-                            for subtask in parallel_subtasks
-                        ],
-                        name=merged_obj_name,
-                    )
-                )
+                self.subtask_objs.append(self._create_merged_actor_from_subtasks(
+                    parallel_subtasks, name=merged_obj_name
+                ))
                 self.subtask_goals.append(None)
 
                 self.task_plan.append(PickSubtask(obj_id=merged_obj_name))
@@ -155,26 +145,13 @@ class SequentialTaskEnv(SceneManipulationEnv):
                 parallel_subtasks: List[PlaceSubtask]
                 merged_obj_name = f"obj_{subtask_num}"
                 merged_goal_name = f"goal_{subtask_num}"
-
-                self.subtask_objs.append(
-                    Actor.merge(
-                        [
-                            self._get_actor(subtask.obj_id)
-                            for subtask in parallel_subtasks
-                        ],
-                        name=merged_obj_name,
-                    )
-                )
+                self.subtask_objs.append(self._create_merged_actor_from_subtasks(
+                    parallel_subtasks, name=merged_obj_name
+                ))
                 self.subtask_goals.append(
-                    Actor.merge(
-                        [
-                            self._make_goal(
-                                pos=subtask.goal_pos,
-                                radius=self.place_cfg.obj_goal_thresh,
-                                name=f"goal_{subtask.uid}",
-                            )
-                            for subtask in parallel_subtasks
-                        ],
+                    self._make_goal(
+                        pos=torch.tensor(subtask.goal_pos for subtask in parallel_subtasks),
+                        radius=self.place_cfg.obj_goal_thresh,
                         name=merged_goal_name,
                     )
                 )
@@ -207,12 +184,31 @@ class SequentialTaskEnv(SceneManipulationEnv):
 
     def _get_actor(self, actor_id: str):
         return self.scene_builder.movable_objects_by_id[actor_id]
+    
+    def _create_merged_actor_from_subtasks(
+            self,
+            parallel_subtasks: Union[List[PickSubtask], List[PlaceSubtask]],
+            name: str = None
+        ):
+        merged_obj = Actor._create_from_entities(
+            [
+                self._get_actor(subtask.obj_id)._objs[i]
+                for i, subtask in enumerate(parallel_subtasks)
+            ],
+            scene=self._scene,
+            scene_mask=np.ones(self.num_envs, dtype=bool)
+        )
+        if name is not None:
+            merged_obj.name = name,
+        return merged_obj
+
 
     def _make_goal(
         self,
-        pos: Tuple[float, float, float] = None,
+        pos: Union[Tuple[float, float, float], List[Tuple[float, float, float]]] = None,
         radius=0.15,
         name="goal_site",
+        scene_mask=None,
     ):
         goal = build_sphere(
             self._scene,
@@ -221,9 +217,13 @@ class SequentialTaskEnv(SceneManipulationEnv):
             name=name,
             body_type="kinematic",
             add_collision=False,
+            scene_mask=scene_mask,
         )
         if pos is not None:
-            goal.set_pose(sapien.Pose(p=pos))
+            if len(pos) == self.num_envs:
+                goal.set_pose(Pose.create_from_pq(p=pos))
+            else:
+                goal.set_pose(sapien.Pose(p=pos))
         self._hidden_objects.append(goal)
         return goal
 
