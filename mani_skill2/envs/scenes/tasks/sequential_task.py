@@ -361,7 +361,7 @@ class SequentialTaskEnv(SceneManipulationEnv):
     ):
         is_grasped = self.agent.is_grasping(obj, max_angle=30)[env_idx]
         obj_at_goal = (
-            torch.linalg.norm(obj.pose.p[env_idx] - obj_goal.pose.p[env_idx], axis=1)
+            torch.norm(obj.pose.p[env_idx] - obj_goal.pose.p[env_idx], dim=1)
             <= obj_goal_thresh
         )
         ee_rest = (
