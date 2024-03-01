@@ -13,9 +13,10 @@ from mani_skill2.utils.geometry.rotation_conversions import quaternion_raw_multi
 import sapien
 import sapien.physx as physx
 
-import numpy as np
 import torch
 import torch.random
+from torch.nn.utils.rnn import pad_sequence
+import numpy as np
 
 from tqdm import tqdm
 from functools import cached_property
@@ -119,39 +120,6 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
     def reset(self, *args, **kwargs):
         self.robot_cumulative_force = 0
         return super().reset(*args, **kwargs)
-    
-    def _get_actor_contacts(
-        self, contacts: List[physx.PhysxContact], actor: sapien.Entity,
-        ignore_collision_entities=set(),
-    ) -> List[Tuple[physx.PhysxContact, bool]]:
-        entity_contacts = []
-        for contact in contacts:
-            if (
-                contact.bodies[0].entity == actor and 
-                contact.bodies[1].entity not in ignore_collision_entities
-            ):
-                entity_contacts.append((contact, True))
-            elif (
-                contact.bodies[1].entity == actor and 
-                contact.bodies[0].entity not in ignore_collision_entities
-            ):
-                entity_contacts.append((contact, False))
-        return entity_contacts
-
-    def _get_robot_force(self, ignore_grippers=True):
-        contacts = self._scene.get_contacts()
-
-        robot_impulse = 0
-        for rle in self._robot_link_entities:
-            if ignore_grippers and rle in self._robot_finger_entities:
-                continue
-            rle_impulse = compute_total_impulse(self._get_actor_contacts(
-                contacts, rle, ignore_collision_entities=self.force_rew_ignore_entities,
-            ))
-            robot_impulse += np.linalg.norm(rle_impulse)
-        
-        return robot_impulse * self._sim_freq
-    
 
     # -------------------------------------------------------------------------------------------------
     # INIT RANDOMIZATION
@@ -177,53 +145,79 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
 
 
     def reconfigure(self):
-        # run reconfiguration
-        super().reconfigure()
+        with torch.device(self.device):
+            # run reconfiguration
+            super().reconfigure()
 
-        # links and entities for force tracking
-        self._obj_entity = self.subtask_objs[0]._bodies[0].entity
-        self._robot_link_entities = [
-            x._bodies[0].entity for x in self.agent.robot.get_links()
-        ]
-        self._robot_finger_entities = set([
-            x._bodies[0].entity for x in [self.agent.finger1_link, self.agent.finger2_link]
-        ])
-        self.force_rew_ignore_entities = set(self._robot_link_entities + [self._obj_entity])
+            # links and entities for force tracking
+            force_rew_ignore_links = [
+                self.agent.finger1_link, self.agent.finger2_link, self.agent.tcp
+            ]
+            self.force_articulation_link_ids = [
+                link.name for link in self.agent.robot.get_links() if link not in force_rew_ignore_links
+            ]
 
+            # NOTE (arth): targ obj should be same across gpu envs
+            #   and same default pose, so we use unbatched pose
+            obj_ids = [task.obj_id for task in list(zip(*self.base_task_plans))[0]]
+            obj = self.subtask_objs[0]
 
-        self.scene_builder.set_actor_default_poses_vels()
+            self.scene_builder.set_actor_default_poses_vels()
+            spawn_loc_rots = []
+            spawn_dists = []
+            for env_idx in range(self.num_envs):
+                center = obj.pose.p[env_idx, :2]
+                slr, dists = self._get_navigable_spawn_positions_with_rots_and_dists(
+                        center[0], center[1]
+                    )
+                spawn_loc_rots.append(slr)
+                spawn_dists.append(dists)
 
-        # NOTE (arth): targ obj should be same across gpu envs
-        #   and same default pose, so we use unbatched pose
-        obj = self.subtask_objs[0]
-        center = obj.pose.p[0, :2]
+            num_spawn_loc_rots = torch.tensor([len(slr) for slr in spawn_loc_rots])
+            spawn_loc_rots = pad_sequence(spawn_loc_rots, batch_first=True, padding_value=0).transpose(1, 0)
+            spawn_dists = pad_sequence(spawn_dists, batch_first=True, padding_value=0).transpose(1, 0)
 
-        self.spawn_loc_rot, dists = self._get_navigable_spawn_positions_with_rots_and_dists(
-            center[0], center[1]
-        )
-        
-        # TODO: (arth) implement with gpu sim?
-        accept_spawn_loc_rot = []
-        qpos = self.agent.RESTING_QPOS
-        self.scene_builder.disable_fetch_ground_collisions()
+            qpos = torch.tensor(
+                self.agent.RESTING_QPOS[..., None].repeat(self.num_envs, axis=-1).transpose(1, 0)
+            ).float()
+            accept_spawn_loc_rots = [[]] * self.num_envs
+            accept_dists = [[]] * self.num_envs
+            bounding_box_corners = [
+                torch.tensor([dx, dy, 0]) for dx, dy in itertools.product([0.1, -0.1], [0.1, -0.1])
+            ]
+            for slr_num, (slrs, dists) in tqdm(
+                enumerate(zip(spawn_loc_rots, spawn_dists)), total=spawn_loc_rots.size(0)
+            ):
 
-        for x, y, z_rot in tqdm(self.spawn_loc_rot, total=len(self.spawn_loc_rot)):
-            robot_force = 0
-            for delta_x, delta_y in itertools.product([0.1, -0.1], [0.1, -0.1]):
-                self.agent.controller.reset()
-                qpos[..., 2] = z_rot
-                self.agent.reset(qpos)
-                self.agent.robot.set_pose(sapien.Pose(p=[
-                    x + delta_x, y + delta_y, self.agent.robot.pose.p[0, 2]
-                ]))
-                self._scene.step()
-                robot_force += self._get_robot_force()
-            accept_spawn_loc_rot.append(robot_force <= 1e-3)
-        self.spawn_loc_rot = self.spawn_loc_rot[accept_spawn_loc_rot]
+                slrs_within_range = slr_num < num_spawn_loc_rots
+                robot_force = torch.zeros(self.num_envs)
 
-        dists = dists[accept_spawn_loc_rot]
-        self.closest_spawn_loc_rot = self.spawn_loc_rot[torch.argmin(dists)]
+                for shift in bounding_box_corners:
+                    shifted_slrs = slrs + shift
+                    
+                    self.agent.controller.reset()
+                    qpos[..., 2] = shifted_slrs[..., 2]
+                    self.agent.reset(qpos)
 
+                    # ad-hoc use z-rot dim a z-height dim, set using default setting
+                    shifted_slrs[..., 2] = self.agent.robot.pose.p[..., 2]
+                    self.agent.robot.set_pose(Pose.create_from_pq(p=shifted_slrs.float()))
+
+                    self._scene.step()
+                    robot_force += self.agent.robot.get_net_contact_forces(
+                        self.force_articulation_link_ids
+                    ).norm(dim=-1).sum(dim=-1)
+
+                for i in torch.where(slrs_within_range & (robot_force < 1e-3))[0]:
+                    print(i)
+                    accept_spawn_loc_rots[i].append(slrs[i].cpu().numpy().tolist())
+                    accept_dists[i].append(dists[i].cpu().numpy().tolist())
+
+            self.num_spawn_loc_rots = torch.tensor([len(x) for x in accept_spawn_loc_rots])
+            self.spawn_loc_rots = pad_sequence(
+                [torch.tensor(x) for x in accept_spawn_loc_rots],
+                batch_first=True, padding_value=0,
+            )
 
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     
