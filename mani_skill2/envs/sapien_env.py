@@ -644,6 +644,10 @@ class BaseEnv(gym.Env):
         self._set_episode_rng(self._episode_seed)
         self.agent.reset()
         self.initialize_episode(env_idx)
+        # reset the reset mask back to all ones so any internal code in maniskill can continue to manipulate all scenes at once as usual
+        self._scene._reset_mask = torch.ones(
+            self.num_envs, dtype=bool, device=self.device
+        )
         obs = self.get_obs()
         if physx.is_gpu_enabled():
             # ensure all updates to object poses and configurations are applied on GPU after task initialization
@@ -974,6 +978,8 @@ class BaseEnv(gym.Env):
         if physx.is_gpu_enabled() and self._scene._gpu_sim_initialized:
             self.physx_system.sync_poses_gpu_to_cpu()
         self._viewer.render()
+        for obj in self._hidden_objects:
+            obj.hide_visual()
         return self._viewer
 
     def render_rgb_array(self, camera_name: str = None):
