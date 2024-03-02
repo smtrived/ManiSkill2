@@ -248,9 +248,9 @@ class SequentialTaskEnv(SceneManipulationEnv):
     def _initialize_task(self, env_idx: torch.Tensor):
         # TODO (arth): currently there's a bug where prev contacts/etc will maintain themselves somehow
         #       maybe bug will be fixed alter, but in meantime just step scene to get rid of old contacts
-        if not sapien.physx.is_gpu_enabled():
-            self.agent.controller.reset()
-            self._scene.step()
+        # if not sapien.physx.is_gpu_enabled():
+        self.agent.controller.reset()
+        self._scene.step()
 
         self.subtask_pointer[env_idx] = 0
         self.subtask_steps_left[env_idx] = self.task_cfgs[
@@ -258,6 +258,11 @@ class SequentialTaskEnv(SceneManipulationEnv):
         ].horizon
         self.ee_rest_pos_wrt_base = Pose.create_from_pq(p=self.EE_REST_POS_WRT_BASE)
         self.ee_rest_world_pose = self._compute_ee_rest_world_pose()
+
+        if physx.is_gpu_enabled():
+            self._scene._gpu_apply_all()
+            self._scene.px.gpu_update_articulation_kinematics()
+            self._scene._gpu_fetch_all()
 
     # -------------------------------------------------------------------------------------------------
 
