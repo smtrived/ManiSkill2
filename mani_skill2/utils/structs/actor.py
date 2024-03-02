@@ -243,4 +243,7 @@ class Actor(PhysxRigidDynamicComponentStruct, BaseStruct[sapien.Entity]):
             self._objs[0].pose = to_sapien_pose(arg1)
 
     def set_pose(self, arg1: Union[Pose, sapien.Pose]) -> None:
-        self.pose = arg1
+        if physx.is_gpu_enabled() and self.hidden:
+            self.before_hide_pose = vectorize_pose(arg1)
+        else:
+            self.pose = arg1

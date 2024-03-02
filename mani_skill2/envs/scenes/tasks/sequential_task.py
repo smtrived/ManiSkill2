@@ -517,8 +517,6 @@ class SequentialTaskEnv(SceneManipulationEnv):
         sensor_images = self.get_sensor_obs()
         for sensor_images in sensor_images.values():
             images.extend(observations_to_images(sensor_images))
-        for obj in self._hidden_objects:
-            obj.show_visual()
         return tile_images([self.render_rgb_array()] + images)
 
     def render_rgb_array(self):
