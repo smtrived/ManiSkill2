@@ -216,7 +216,7 @@ class RecordEpisode(gym.Wrapper):
         self,
         *args,
         seed: Optional[Union[int, List[int]]] = None,
-        options: Optional[dict] = dict(),
+        options: Optional[dict] = None,
         **kwargs,
     ):
         skip_trajectory = False

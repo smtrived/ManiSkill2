@@ -3,13 +3,14 @@ import numpy as np
 import torch
 
 from mani_skill2.envs.scenes.base_env import SceneManipulationEnv
-from mani_skill2.envs.scenes.tasks import PickSequentialTaskEnv, SequentialTaskEnv
-from mani_skill2.envs.scenes.tasks.planner import PickSubtask, plan_data_from_file
 from mani_skill2.utils.scene_builder.ai2thor import (
     ArchitecTHORSceneBuilder,
     ProcTHORSceneBuilder,
     RoboTHORSceneBuilder,
     iTHORSceneBuilder,
+)
+from mani_skill2.utils.scene_builder.replicacad.scene_builder import (
+    ReplicaCADSceneBuilder,
 )
 from mani_skill2.utils.wrappers import RecordEpisode
 
@@ -18,61 +19,46 @@ if __name__ == "__main__":
     render_mode = "human"
     print("RENDER_MODE", render_mode)
 
-    SCENE_IDX_TO_APPLE_PLAN = {
-        0: [PickSubtask(obj_id="objects/Apple_5_111")],
-        1: [PickSubtask(obj_id="objects/Apple_16_40")],
-        2: [PickSubtask(obj_id="objects/Apple_12_64")],
-        3: [PickSubtask(obj_id="objects/Apple_29_113")],
-        4: [PickSubtask(obj_id="objects/Apple_28_35")],
-        5: [PickSubtask(obj_id="objects/Apple_17_88")],
-        6: [PickSubtask(obj_id="objects/Apple_1_35")],
-        7: [PickSubtask(obj_id="objects/Apple_25_48")],
-        8: [PickSubtask(obj_id="objects/Apple_9_46")],
-        9: [PickSubtask(obj_id="objects/Apple_13_72")],
-    }
-
-    SCENE_IDX = 6
-    env: SequentialTaskEnv = gym.make(
-        "SequentialTask-v0",
-        obs_mode="state",
+    env = gym.make(
+        "SceneManipulation-v1",
         render_mode=render_mode,
-        control_mode="pd_joint_delta_pos",
-        reward_mode="dense",
         robot_uids="fetch",
-        scene_builder_cls=ArchitecTHORSceneBuilder,
-        task_plans=[SCENE_IDX_TO_APPLE_PLAN[SCENE_IDX]],
-        scene_idxs=SCENE_IDX,
-        num_envs=2,
-        force_use_gpu_sim=True,
+        scene_builder_cls=ReplicaCADSceneBuilder,
+        num_envs=1,
+        # force_use_gpu_sim=True,
+        scene_idxs=3,
+        # obs_mode="rgbd"
     )
     obs, info = env.reset(seed=0)
+    # import matplotlib.pyplot as plt
     # import ipdb;ipdb.set_trace()
     viewer = env.render()
-    base_env: SequentialTaskEnv = env.unwrapped
+    # base_env: SequentialTaskEnv = env.unwrapped
     viewer.paused = True
     viewer = env.render()
-    print(base_env.agent.robot.qpos[0])
-    robot = base_env.agent.robot
-    print(robot.qpos[:, robot.active_joint_map["r_gripper_finger_joint"].active_index])
-    print(robot.qpos[:, robot.active_joint_map["l_gripper_finger_joint"].active_index])
-    print("START")
-    # import ipdb;ipdb.set_trace()
-
     for i in range(10000):
         action = np.zeros(env.action_space.shape)
         # action[..., -7] = -1
-        action[..., -3:-1] = 1
-
-        # action = env.action_space.sample()
-        print("pre-step")
+        if i < 60:
+            action[..., -3] = 1
+        elif i < 100:
+            action[..., -3] = 1
+            action[..., -1] = 0.3
+        elif i < 200:
+            action[..., -3] = 1
+            # action[..., -1] = .22
+        else:
+            action = env.action_space.sample()
+        if viewer.window.key_press("r"):
+            obs, info = env.reset()
+        #
         env.step(action)
-        print("post-step")
-        print(
-            robot.qpos[:, robot.active_joint_map["r_gripper_finger_joint"].active_index]
-        )
-        print(
-            robot.qpos[:, robot.active_joint_map["l_gripper_finger_joint"].active_index]
-        )
+        # print(
+        #     robot.qpos[:, robot.active_joint_map["r_gripper_finger_joint"].active_index]
+        # )
+        # print(
+        #     robot.qpos[:, robot.active_joint_map["l_gripper_finger_joint"].active_index]
+        # )
 
         env.render()
     # agent_obs = obs["agent"]
