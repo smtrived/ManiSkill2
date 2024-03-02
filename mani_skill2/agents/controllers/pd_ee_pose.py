@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from os import devnull
 from typing import Sequence, Union
 
+import fast_kinematics
 import numpy as np
 
 # TODO (stao): https://github.com/UM-ARM-Lab/pytorch_kinematics/issues/35 pk requires mujoco as it is always imported despite not being used for the code we need
@@ -50,6 +51,10 @@ class PDEEPosController(PDJointPosController):
                     urdf_str,
                     end_link_name=self.config.ee_link,
                 ).to(device="cuda")
+
+            self.fast_kinematics_model = fast_kinematics.FastKinematics(
+                self.config.urdf_path, self.scene.num_envs, self.config.ee_link
+            )
         else:
             # TODO should we just use jacobian inverse * delta method from pk?
             self.pmodel = self.articulation._objs[0].create_pinocchio_model()
