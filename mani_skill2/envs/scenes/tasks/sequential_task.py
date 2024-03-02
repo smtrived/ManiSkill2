@@ -293,7 +293,7 @@ class SequentialTaskEnv(SceneManipulationEnv):
         return dict(
             success=success,
             fail=fail,
-            is_grasped=is_grasped.unsqueeze(-1),
+            is_grasped=is_grasped,
             subtask=self.subtask_pointer,
             subtask_type=subtask_type,
             subtasks_steps_left=self.subtask_steps_left,
