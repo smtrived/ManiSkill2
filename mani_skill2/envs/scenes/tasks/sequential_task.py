@@ -56,7 +56,7 @@ class SequentialTaskEnv(SceneManipulationEnv):
     SUPPORTED_ROBOTS = ["fetch"]
     agent: Fetch
     sim_cfg = SimConfig(
-        spacing=20,
+        spacing=30,
         gpu_memory_cfg=GPUMemoryConfig(
             found_lost_pairs_capacity=2**25, max_rigid_patch_count=2**18
         ),
@@ -509,14 +509,16 @@ class SequentialTaskEnv(SceneManipulationEnv):
         return robot_camera_config
 
     def render_cameras(self):
-        images = []
         for obj in self._hidden_objects:
             obj.hide_visual()
+        images = []
         self._scene.update_render()
         self.capture_sensor_data()
         sensor_images = self.get_sensor_obs()
         for sensor_images in sensor_images.values():
             images.extend(observations_to_images(sensor_images))
+        for obj in self._hidden_objects:
+            obj.show_visual()
         return tile_images([self.render_rgb_array()] + images)
 
     def render_rgb_array(self):
