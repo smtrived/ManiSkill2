@@ -264,8 +264,8 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                 # base pos
                 robot_pos = self.agent.robot.pose.p
                 robot_pos[..., :2] += torch.clamp(torch.normal(
-                    0, 0.1, (b, len(robot_pos[0, :2]))
-                ), -0.1, 0.1).to(self.device)
+                    0, 0.04, (b, len(robot_pos[0, :2]))
+                ), -0.075, 0.075).to(self.device)
                 self.agent.robot.set_pose(Pose.create_from_pq(p=robot_pos))
                 # base rot
                 qpos[..., 2:3] += torch.clamp(torch.normal(
