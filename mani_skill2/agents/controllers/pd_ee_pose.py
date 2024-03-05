@@ -105,17 +105,27 @@ class PDEEPosController(PDJointPosController):
         # Assume the target pose is defined in the base frame
         if physx.is_gpu_enabled():
             # import ipdb;ipdb.set_trace()
-            # jacobian = self.fast_kinematics_model.jacobian_mixed_frame_pytorch(self.qpos).view(-1,7,6).permute(0,2,1)
+            # import time
+            # stime=time.time()
+            jacobian = (
+                self.fast_kinematics_model.jacobian_mixed_frame_pytorch(self.qpos)
+                .view(-1, 7, 6)
+                .permute(0, 2, 1)
+            )
             # jacobian = jacobian.cpu()
-            jacobian = self.pk_chain.jacobian(self.qpos)
+            # jacobian = self.pk_chain.jacobian(self.qpos)
             # NOTE (stao): a bit of a hacky way to check if we want to do IK on position or pose here
+            # print(f"jacobian {time.time() - stime}")
+            # stime=time.time()
             if action.shape[1] == 3:
                 jacobian = jacobian[:, 0:3]
 
             # NOTE (stao): this method of IK is from https://mathweb.ucsd.edu/~sbuss/ResearchWeb/ikmethods/iksurvey.pdf by Samuel R. Buss
+            # delta_joint_pos = jacobian.transpose(1, 2) @ action.unsqueeze(-1)
             delta_joint_pos = torch.linalg.pinv(jacobian) @ action.unsqueeze(-1)
-            return self.qpos + delta_joint_pos.squeeze(-1)
-
+            result = self.qpos + delta_joint_pos.squeeze(-1)
+            # print(f"pinv, squeezes {time.time() - stime}")
+            return result
         else:
             result, success, error = self.pmodel.compute_inverse_kinematics(
                 self.ee_link_idx,
@@ -147,6 +157,8 @@ class PDEEPosController(PDJointPosController):
         return target_pose
 
     def set_action(self, action: Array):
+        # import time
+        # stime = time.time()
         action = self._preprocess_action(action)
         self._step = 0
         self._start_qpos = self.qpos
@@ -155,15 +167,21 @@ class PDEEPosController(PDJointPosController):
             prev_ee_pose_at_base = self._target_pose
         else:
             prev_ee_pose_at_base = self.ee_pose_at_base
-
+        # print(f"preprocess {time.time() - stime}")
+        # stime = time.time()
         self._target_pose = self.compute_target_pose(prev_ee_pose_at_base, action)
+        # print(f"target_pose {time.time() - stime}")
+        # stime = time.time()
         self._target_qpos = self.compute_ik(self._target_pose, action)
+        # print(f"target_qpos {time.time() - stime}")
+        # stime = time.time()
         if self._target_qpos is None:
             self._target_qpos = self._start_qpos
         if self.config.interpolate:
             self._step_size = (self._target_qpos - self._start_qpos) / self._sim_steps
         else:
             self.set_drive_targets(self._target_qpos)
+        # print(f"rest {time.time() - stime}")
 
     def get_state(self) -> dict:
         if self.config.use_target:
