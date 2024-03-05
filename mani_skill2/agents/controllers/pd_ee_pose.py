@@ -104,6 +104,9 @@ class PDEEPosController(PDJointPosController):
     def compute_ik(self, target_pose: Pose, action: Array, max_iterations=100):
         # Assume the target pose is defined in the base frame
         if physx.is_gpu_enabled():
+            # import ipdb;ipdb.set_trace()
+            # jacobian = self.fast_kinematics_model.jacobian_mixed_frame_pytorch(self.qpos).view(-1,7,6).permute(0,2,1)
+            # jacobian = jacobian.cpu()
             jacobian = self.pk_chain.jacobian(self.qpos)
             # NOTE (stao): a bit of a hacky way to check if we want to do IK on position or pose here
             if action.shape[1] == 3:
