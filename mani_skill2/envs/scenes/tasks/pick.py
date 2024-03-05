@@ -380,6 +380,10 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
 
             # ---------------------------------------------------
 
+            new_info = dict()
+            for k in ["success", "fail", "is_grasped", "robot_force", "robot_cumulative_force"]:
+                new_info[k] = info[k].clone()
+
             if torch.any(robot_too_far):
                 # prevent torso and arm moving too much
                 arm_torso_qvel = self.agent.robot.qvel[..., 3:-2][robot_too_far]
@@ -389,6 +393,13 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                 # encourage robot to move closer to obj
                 robot_getting_closer_rew = (1 - torch.tanh(robot_to_obj_dist[robot_too_far] / 5))
                 too_far_reward += robot_getting_closer_rew
+
+                x = torch.zeros(self.num_envs, dtype=arm_torso_still_rew.dtype)
+                x[robot_too_far] = arm_torso_still_rew
+                new_info["arm_torso_still_rew"] = x.clone()
+                x = torch.zeros(self.num_envs, dtype=robot_getting_closer_rew.dtype)
+                x[robot_too_far] = robot_getting_closer_rew
+                new_info["robot_getting_closer_rew"] = x.clone()
 
 
             if torch.any(robot_close_enough):
@@ -424,6 +435,23 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                 close_enough_reward += arm_resting_orientation_rew
 
 
+                x = torch.zeros(self.num_envs, dtype=reaching_rew.dtype)
+                x[robot_close_enough] = reaching_rew
+                new_info["reaching_rew"] = x.clone()
+                x = torch.zeros(self.num_envs, dtype=ee_still_rew.dtype)
+                x[robot_close_enough] = ee_still_rew
+                new_info["ee_still_rew"] = x.clone()
+                x = torch.zeros(self.num_envs, dtype=grasp_rew.dtype)
+                x[robot_close_enough] = grasp_rew
+                new_info["grasp_rew"] = x.clone()
+                x = torch.zeros(self.num_envs, dtype=success_rew.dtype)
+                x[robot_close_enough] = success_rew
+                new_info["success_rew"] = x.clone()
+                x = torch.zeros(self.num_envs, dtype=arm_resting_orientation_rew.dtype)
+                x[robot_close_enough] = arm_resting_orientation_rew
+                new_info["arm_resting_orientation_rew"] = x.clone()
+
+
             if torch.any(not_grasped):
                 # penalty for torso moving up and down too much
                 tqvel_z = self.agent.robot.qvel[..., 3][not_grasped]
@@ -435,6 +463,14 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                     obj_pos[..., :2][not_grasped] - tcp_pos[..., :2][not_grasped], dim=1
                 )))
                 not_grasped_reward += ee_over_obj_rew
+
+
+                x = torch.zeros(self.num_envs, dtype=torso_not_moving_rew.dtype)
+                x[not_grasped] = torso_not_moving_rew
+                new_info["torso_not_moving_rew"] = x.clone()
+                x = torch.zeros(self.num_envs, dtype=ee_over_obj_rew.dtype)
+                x[not_grasped] = ee_over_obj_rew
+                new_info["ee_over_obj_rew"] = x.clone()
 
 
             if torch.any(is_grasped):
@@ -453,10 +489,23 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                 is_grasped_reward += base_still_rew
 
 
+                x = torch.zeros(self.num_envs, dtype=place_rew.dtype)
+                x[is_grasped] = place_rew
+                new_info["place_rew"] = x.clone()
+                x = torch.zeros(self.num_envs, dtype=base_still_rew.dtype)
+                x[is_grasped] = base_still_rew
+                new_info["base_still_rew"] = x.clone()
+
+
             if torch.any(ee_rest):
                 qvel = self.agent.robot.qvel[..., :-2][ee_rest]
                 static_rew = (1 - torch.tanh(torch.norm(qvel, dim=1)))
                 ee_rest_reward += static_rew
+
+
+                x = torch.zeros(self.num_envs, dtype=static_rew.dtype)
+                x[ee_rest] = static_rew
+                new_info["static_rew"] = x.clone()
 
 
             # add rewards to specific envs
@@ -475,6 +524,11 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
             # cumulative collision penalty
             cum_col_pen = (info["robot_cumulative_force"] > self.robot_cumulative_force_limit).float()
             reward -= cum_col_pen
+
+            for k in list(info.keys()):
+                info.pop(k, False)
+
+            info.update(new_info)
 
         return reward
 
