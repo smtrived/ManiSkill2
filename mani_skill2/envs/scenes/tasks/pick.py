@@ -390,6 +390,8 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
                     else:
                         new_info[k] = info[k]
 
+            new_info["robot_to_obj_dist"] = robot_to_obj_dist
+
             if torch.any(robot_too_far):
                 # prevent torso and arm moving too much
                 arm_torso_qvel = self.agent.robot.qvel[..., 3:-2][robot_too_far]
