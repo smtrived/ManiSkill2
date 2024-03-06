@@ -338,7 +338,7 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
             tcp_pos = self.agent.tcp_pose.p
 
             robot_to_obj_dist = torch.norm(
-                self.agent.torso_lift_link.pose.p - self.agent.tcp_pose.p, dim=1
+                self.agent.torso_lift_link.pose.p - obj_pos, dim=1
             )
 
 
@@ -381,8 +381,14 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
             # ---------------------------------------------------
 
             new_info = dict()
-            for k in ["success", "fail", "is_grasped", "robot_force", "robot_cumulative_force"]:
-                new_info[k] = info[k].clone()
+            for k in ["elapsed_steps", "success", "fail", "is_grasped", "robot_force", "robot_cumulative_force"]:
+                if k in info:
+                    if isinstance(info[k], torch.Tensor):
+                        new_info[k] = info[k].clone()
+                    elif isinstance(info[k], np.ndarray):
+                        new_info[k] = info[k].copy()
+                    else:
+                        new_info[k] = info[k]
 
             if torch.any(robot_too_far):
                 # prevent torso and arm moving too much
