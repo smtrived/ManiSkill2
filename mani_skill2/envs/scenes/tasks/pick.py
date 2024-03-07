@@ -338,7 +338,7 @@ class PickSequentialTaskEnv(SequentialTaskEnv):
             tcp_pos = self.agent.tcp_pose.p
 
             robot_to_obj_dist = torch.norm(
-                self.agent.torso_lift_link.pose.p - obj_pos, dim=1
+                self.agent.base_link.pose.p - obj_pos, dim=1
             )
 
 
