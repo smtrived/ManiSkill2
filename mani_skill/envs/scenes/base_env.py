@@ -83,10 +83,13 @@ class SceneManipulationEnv(BaseEnv):
         if not self.fixed_scene:
             options["reconfigure"] = True
         if "reconfigure" in options and options["reconfigure"]:
-            self.sampled_scene_idx = self.scene_idxs[
-                self._episode_rng.randint(0, len(self.scene_idxs))
-            ]
-            self.sampled_scene_idx = int(self.sampled_scene_idx)
+            if "scene_idx" in options and isinstance(options["scene_idx"], int):
+                self.sampled_scene_idx = options["scene_idx"]
+            else:
+                self.sampled_scene_idx = self.scene_idxs[
+                    self._episode_rng.randint(0, len(self.scene_idxs))
+                ]
+                self.sampled_scene_idx = int(self.sampled_scene_idx)
         return super().reset(seed, options)
 
     def _setup_lighting(self):

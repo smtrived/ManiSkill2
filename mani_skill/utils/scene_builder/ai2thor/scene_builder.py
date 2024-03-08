@@ -40,6 +40,19 @@ OBJECT_SEMANTIC_ID_MAPPING, SEMANTIC_ID_OBJECT_MAPPING, MOVEABLE_OBJECT_IDS = (
     None,
 )
 
+SCENE_IDX_TO_START_POS = {
+    0: (-3, 0),
+    1: (0, 0),
+    2: (0, 0),
+    3: (-3.5, 0),
+    4: (2, -1),
+    5: (-1, 1.5),
+    6: (1, -0.5),
+    7: (3.25, 1),
+    8: (1, 0),
+    9: (1, 1),
+}
+
 # TODO (arth): fix coacd so this isn't necessary
 WORKING_OBJS = ["apple", "potato", "tomato"]
 
@@ -185,13 +198,12 @@ class AI2THORBaseSceneBuilder(SceneBuilder):
             self._scene_objects[actor_id] = actor
 
         if self._scene_navigable_positions[scene_idx] is None:
-            self._scene_navigable_positions[scene_idx] = np.load(
-                Path(dataset.dataset_path)
-                / (
-                    Path(scene_cfg.config_file).stem.split(".")[0]
-                    + f".{self.env.robot_uids}.navigable_positions.npy"
-                )
+            npy_fp = Path(dataset.dataset_path) / (
+                Path(scene_cfg.config_file).stem
+                + f".{self.env.robot_uids}.navigable_positions.npy"
             )
+            if npy_fp.exists():
+                self._scene_navigable_positions[scene_idx] = np.load(npy_fp)
 
     def disable_fetch_ground_collisions(self, bodies, and_base=False):
         for body in bodies:
@@ -236,7 +248,14 @@ class AI2THORBaseSceneBuilder(SceneBuilder):
         elif self.env.robot_uids == "fetch":
             agent: Fetch = self.env.agent
             agent.reset(agent.RESTING_QPOS)
-            agent.robot.set_pose(sapien.Pose([*self.navigable_positions[0], 0.001]))
+            if self.navigable_positions is not None:
+                agent.robot.set_pose(
+                    sapien.Pose(p=[*self.navigable_positions[0], 0.001])
+                )
+            else:
+                agent.robot.set_pose(
+                    sapien.Pose(p=[*SCENE_IDX_TO_START_POS[self.scene_idx], 0.001])
+                )
             self.disable_fetch_ground_collisions(self.bg._bodies)
         else:
             raise NotImplementedError(self.env.robot_uids)

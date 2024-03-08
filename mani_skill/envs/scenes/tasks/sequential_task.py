@@ -296,8 +296,6 @@ class SequentialTaskEnv(SceneManipulationEnv):
         subtask_type = torch.full_like(self.subtask_pointer, len(self.task_plan))
         subtask_type[~success] = self.task_ids[self.subtask_pointer[[~success]]]
 
-        # self._scene.px.gpu_create_contact_pair_impulse_query(self.scene_builder.bg)
-
         return dict(
             success=success,
             fail=fail,
@@ -502,14 +500,14 @@ class SequentialTaskEnv(SceneManipulationEnv):
         # return room_camera_config
 
         # this camera follows the robot around (though might be in walls if the space is cramped)
-        robot_camera_pose = look_at([2, 0, 1], [0, 0, 0])
+        robot_camera_pose = look_at([0, 0.5, 1], [0.5, -0.5, 0])
         robot_camera_config = CameraConfig(
             "render_camera",
             robot_camera_pose.p,
             robot_camera_pose.q,
             512,
             512,
-            1.5,
+            2,
             0.01,
             10,
             link=self.agent.torso_lift_link,

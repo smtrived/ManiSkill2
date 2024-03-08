@@ -7,6 +7,7 @@ This code is also heavily commented to serve as a tutorial for how to build cust
 import json
 import os.path as osp
 from typing import Dict, List, Tuple
+from pathlib import Path
 
 import numpy as np
 import sapien
@@ -214,18 +215,24 @@ class ReplicaCADSceneBuilder(SceneBuilder):
                 )
         scene.set_ambient_light([0.3, 0.3, 0.3])
 
+        if self._scene_navigable_positions[scene_idx] is None:
+            npy_fp = (
+                Path(ASSET_DIR)
+                / "scene_datasets/replica_cad_dataset/configs/scenes"
+                / (
+                    Path(self.scene_configs[scene_idx]).stem
+                    + f".{str(self.env.robot_uids)}.navigable_positions.npy"
+                )
+            )
+            if npy_fp.exists():
+                self._scene_navigable_positions[scene_idx] = np.load(npy_fp)
+
     def initialize(self, env_idx: torch.Tensor):
         if self.env.robot_uids == "fetch":
             agent: Fetch = self.env.agent
             agent.reset(agent.RESTING_QPOS)
 
-            # set robot to be inside the small room in the middle
-            # agent.robot.set_pose(sapien.Pose([0.8, 1.9, 0.001]))
-            # qpos = agent.robot.qpos
-            # qpos[:, 2] = 2.9
-            # agent.robot.set_qpos(qpos)
-
-            agent.robot.set_pose(sapien.Pose([-0.8, -1, 0.001]))
+            agent.robot.set_pose(sapien.Pose([-1.2, 0, 0.001]))
 
         else:
             raise NotImplementedError(self.env.robot_uids)
@@ -263,6 +270,10 @@ class ReplicaCADSceneBuilder(SceneBuilder):
     @property
     def movable_objects(self) -> List[Actor]:
         return list(self._movable_objects.values())
+
+    @property
+    def scene_objects_by_id(self) -> Dict[str, Actor]:
+        return self._scene_objects
 
     @property
     def movable_objects_by_id(self) -> Dict[str, Actor]:
