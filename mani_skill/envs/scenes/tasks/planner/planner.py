@@ -1,5 +1,3 @@
-from mani_skill2.utils.structs.actor import Actor
-
 from omegaconf import OmegaConf
 from dacite import from_dict
 from pathlib import Path
@@ -11,19 +9,24 @@ import shortuuid
 Task Planner Dataclasses
 """
 
+
 @dataclass
 class Subtask:
     uid: str = field(init=False)
+
     def __post_init__(self):
         assert self.type in ["pick", "place"]
-        self.uid = self.type + '_' + shortuuid.ShortUUID().random(length=6)
+        self.uid = self.type + "_" + shortuuid.ShortUUID().random(length=6)
+
 
 TaskPlan = List[Subtask]
+
 
 @dataclass
 class SubtaskConfig:
     task_id: int
     horizon: int = -1
+
     def __post_init__(self):
         assert self.horizon > 0
 
@@ -33,11 +36,13 @@ class PickSubtask(Subtask):
     obj_id: str
     type: str = "pick"
 
+
 @dataclass
 class PickSubtaskConfig(SubtaskConfig):
     task_id: int = 0
     horizon: int = 200
     ee_rest_thresh: float = 0.05
+
     def __post_init__(self):
         assert self.ee_rest_thresh >= 0
 
@@ -51,7 +56,8 @@ class PlaceSubtask(Subtask):
     def __post_init__(self):
         super().__post_init__()
         if isinstance(self.goal_pos, str):
-            self.goal_pos = [float(coord) for coord in self.goal_pos.split(',')]
+            self.goal_pos = [float(coord) for coord in self.goal_pos.split(",")]
+
 
 @dataclass
 class PlaceSubtaskConfig(SubtaskConfig):
@@ -59,13 +65,16 @@ class PlaceSubtaskConfig(SubtaskConfig):
     horizon: int = 200
     ee_rest_thresh: float = 0.05
     obj_goal_thresh: float = 0.15
+
     def __post_init__(self):
         assert self.obj_goal_thresh >= 0
         assert self.ee_rest_thresh >= 0
 
+
 """
 Reading Task Plan from file
 """
+
 
 @dataclass
 class PlanData:
@@ -73,10 +82,12 @@ class PlanData:
     dataset: str
     plan: TaskPlan
 
+
 @dataclass
 class PlanMetadata:
     scene_idx: int
     dataset: str
+
 
 def plan_data_from_file(cfg_path: str = None) -> Tuple[TaskPlan, PlanMetadata]:
     cfg_path: Path = Path(cfg_path)
@@ -98,5 +109,11 @@ def plan_data_from_file(cfg_path: str = None) -> Tuple[TaskPlan, PlanMetadata]:
 
     return plan, metadata
 
-if __name__ == '__main__':
-    print(plan_data_from_file(Path(__file__).parent.parent.parent.parent / "task_plans/scene_6_pick_apple.yml"))
+
+if __name__ == "__main__":
+    print(
+        plan_data_from_file(
+            Path(__file__).parent.parent.parent.parent
+            / "task_plans/scene_6_pick_apple.yml"
+        )
+    )

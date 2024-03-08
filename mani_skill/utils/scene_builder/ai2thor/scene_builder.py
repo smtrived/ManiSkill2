@@ -3,7 +3,6 @@ SceneBuilder for the AI2Thor scenes, using configurations and assets stored in h
 
 """
 
-
 import json
 from tqdm import tqdm
 import os.path as osp
@@ -18,7 +17,11 @@ import transforms3d
 from tqdm import tqdm
 
 from mani_skill import ASSET_DIR
-from mani_skill.agents.robots.fetch import FETCH_UNIQUE_COLLISION_BIT, Fetch
+from mani_skill.agents.robots.fetch import (
+    Fetch,
+    FETCH_UNIQUE_COLLISION_BIT,
+    FETCH_BASE_COLLISION_BIT,
+)
 from mani_skill.envs.scene import ManiSkillScene
 from mani_skill.utils.scene_builder import SceneBuilder
 from mani_skill.utils.structs.actor import Actor
@@ -39,6 +42,7 @@ OBJECT_SEMANTIC_ID_MAPPING, SEMANTIC_ID_OBJECT_MAPPING, MOVEABLE_OBJECT_IDS = (
 
 # TODO (arth): fix coacd so this isn't necessary
 WORKING_OBJS = ["apple", "potato", "tomato"]
+
 
 class AI2THORBaseSceneBuilder(SceneBuilder):
     """
@@ -189,13 +193,14 @@ class AI2THORBaseSceneBuilder(SceneBuilder):
                 )
             )
 
-    def disable_fetch_ground_collisions(self):
-        # TODO (stao) (arth): is there a better way to model robots in sim. This feels very unintuitive.
-        for body in self.bg._bodies:
-            cs = body.get_collision_shapes()[0]
-            cg = cs.get_collision_groups()
-            cg[2] |= FETCH_UNIQUE_COLLISION_BIT
-            cs.set_collision_groups(cg)
+    def disable_fetch_ground_collisions(self, bodies, and_base=False):
+        for body in bodies:
+            for cs in body.get_collision_shapes():
+                cg = cs.get_collision_groups()
+                cg[2] |= FETCH_UNIQUE_COLLISION_BIT
+                if and_base:
+                    cg[2] |= FETCH_BASE_COLLISION_BIT
+                cs.set_collision_groups(cg)
 
     def set_actor_default_poses_vels(self):
         for actor, pose in self.actor_default_poses:
@@ -232,14 +237,14 @@ class AI2THORBaseSceneBuilder(SceneBuilder):
             agent: Fetch = self.env.agent
             agent.reset(agent.RESTING_QPOS)
             agent.robot.set_pose(sapien.Pose([*self.navigable_positions[0], 0.001]))
-            self.disable_fetch_ground_collisions()
+            self.disable_fetch_ground_collisions(self.bg._bodies)
         else:
             raise NotImplementedError(self.env.robot_uids)
 
     @property
     def scene_configs(self) -> List[SceneConfig]:
         return self._scene_configs
-    
+
     @property
     def navigable_positions(self) -> np.ndarray:
         assert isinstance(

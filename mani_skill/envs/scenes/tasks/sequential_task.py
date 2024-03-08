@@ -7,16 +7,16 @@ import sapien.physx as physx
 import torch
 import torch.random
 
-from mani_skill2.agents.robots import Fetch
-from mani_skill2.envs.scenes.base_env import SceneManipulationEnv
-from mani_skill2.sensors.camera import CameraConfig
-from mani_skill2.utils.building.actors import build_sphere
-from mani_skill2.utils.registration import register_env
-from mani_skill2.utils.sapien_utils import look_at
-from mani_skill2.utils.structs.actor import Actor
-from mani_skill2.utils.structs.pose import Pose, vectorize_pose
-from mani_skill2.utils.structs.types import Array, GPUMemoryConfig, SimConfig
-from mani_skill2.utils.visualization.misc import observations_to_images, tile_images
+from mani_skill.agents.robots import Fetch
+from mani_skill.envs.scenes.base_env import SceneManipulationEnv
+from mani_skill.sensors.camera import CameraConfig
+from mani_skill.utils.building.actors import build_sphere
+from mani_skill.utils.registration import register_env
+from mani_skill.utils.sapien_utils import look_at
+from mani_skill.utils.structs.actor import Actor
+from mani_skill.utils.structs.pose import Pose, vectorize_pose
+from mani_skill.utils.structs.types import Array, GPUMemoryConfig, SimConfig
+from mani_skill.utils.visualization.misc import observations_to_images, tile_images
 
 from .planner import (
     PickSubtask,
@@ -89,11 +89,13 @@ class SequentialTaskEnv(SceneManipulationEnv):
     ):
 
         if "num_envs" in kwargs:
-            assert len(task_plans) == kwargs["num_envs"], \
-                f"GPU sim requires equal number of task_plans ({len(task_plans)}) and parallel_envs ({kwargs['num_envs']})"
+            assert (
+                len(task_plans) == kwargs["num_envs"]
+            ), f"GPU sim requires equal number of task_plans ({len(task_plans)}) and parallel_envs ({kwargs['num_envs']})"
         else:
-            assert len(task_plans) == 1, \
-                f"CPU sim only supports one task plan, not {(len(task_plans))}"
+            assert (
+                len(task_plans) == 1
+            ), f"CPU sim only supports one task plan, not {(len(task_plans))}"
 
         self.base_task_plans = task_plans
         self.robot_init_qpos_noise = robot_init_qpos_noise
@@ -112,14 +114,15 @@ class SequentialTaskEnv(SceneManipulationEnv):
 
     def process_task_plan(self):
 
-        assert all_equal([len(plan) for plan in self.base_task_plans]), \
-            "All parallel task plans must be the same length"
+        assert all_equal(
+            [len(plan) for plan in self.base_task_plans]
+        ), "All parallel task plans must be the same length"
         assert np.all(
-                [
-                    all_same_type(parallel_subtasks)
-                    for parallel_subtasks in zip(*self.base_task_plans)
-                ]
-            ), "All parallel task plans must have same subtask types in same order"
+            [
+                all_same_type(parallel_subtasks)
+                for parallel_subtasks in zip(*self.base_task_plans)
+            ]
+        ), "All parallel task plans must have same subtask types in same order"
 
         # build new merged task_plan and merge actors of parallel task plants
         self.task_plan = []
@@ -129,9 +132,11 @@ class SequentialTaskEnv(SceneManipulationEnv):
             if isinstance(subtask0, PickSubtask):
                 parallel_subtasks: List[PickSubtask]
                 merged_obj_name = f"obj_{subtask_num}"
-                self.subtask_objs.append(self._create_merged_actor_from_subtasks(
-                    parallel_subtasks, name=merged_obj_name
-                ))
+                self.subtask_objs.append(
+                    self._create_merged_actor_from_subtasks(
+                        parallel_subtasks, name=merged_obj_name
+                    )
+                )
                 self.subtask_goals.append(None)
 
                 self.task_plan.append(PickSubtask(obj_id=merged_obj_name))
@@ -140,12 +145,16 @@ class SequentialTaskEnv(SceneManipulationEnv):
                 parallel_subtasks: List[PlaceSubtask]
                 merged_obj_name = f"obj_{subtask_num}"
                 merged_goal_name = f"goal_{subtask_num}"
-                self.subtask_objs.append(self._create_merged_actor_from_subtasks(
-                    parallel_subtasks, name=merged_obj_name
-                ))
+                self.subtask_objs.append(
+                    self._create_merged_actor_from_subtasks(
+                        parallel_subtasks, name=merged_obj_name
+                    )
+                )
                 self.subtask_goals.append(
                     self._make_goal(
-                        pos=torch.tensor(subtask.goal_pos for subtask in parallel_subtasks),
+                        pos=torch.tensor(
+                            subtask.goal_pos for subtask in parallel_subtasks
+                        ),
                         radius=self.place_cfg.obj_goal_thresh,
                         name=merged_goal_name,
                     )
@@ -179,24 +188,23 @@ class SequentialTaskEnv(SceneManipulationEnv):
 
     def _get_actor(self, actor_id: str):
         return self.scene_builder.movable_objects_by_id[actor_id]
-    
+
     def _create_merged_actor_from_subtasks(
-            self,
-            parallel_subtasks: Union[List[PickSubtask], List[PlaceSubtask]],
-            name: str = None
-        ):
+        self,
+        parallel_subtasks: Union[List[PickSubtask], List[PlaceSubtask]],
+        name: str = None,
+    ):
         merged_obj = Actor._create_from_entities(
             [
                 self._get_actor(subtask.obj_id)._objs[i]
                 for i, subtask in enumerate(parallel_subtasks)
             ],
             scene=self._scene,
-            scene_mask=np.ones(self.num_envs, dtype=bool)
+            scene_mask=np.ones(self.num_envs, dtype=bool),
         )
         if name is not None:
-            merged_obj.name = name,
+            merged_obj.name = (name,)
         return merged_obj
-
 
     def _make_goal(
         self,

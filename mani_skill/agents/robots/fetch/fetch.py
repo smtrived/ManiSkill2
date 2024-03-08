@@ -21,6 +21,7 @@ from mani_skill.utils.structs.pose import Pose
 from mani_skill.utils.structs.types import Array
 
 FETCH_UNIQUE_COLLISION_BIT = 1 << 30
+FETCH_BASE_COLLISION_BIT = 1 << 31
 
 
 @register_agent()
@@ -347,9 +348,14 @@ class Fetch(BaseAgent):
         )
         for link in [self.l_wheel_link, self.r_wheel_link]:
             for body in link._bodies:
-                cs = body.get_collision_shapes()[0]
+                for cs in body.get_collision_shapes():
+                    cg = cs.get_collision_groups()
+                    cg[2] |= FETCH_UNIQUE_COLLISION_BIT
+                    cs.set_collision_groups(cg)
+        for body in self.base_link._bodies:
+            for cs in body.get_collision_shapes():
                 cg = cs.get_collision_groups()
-                cg[2] |= FETCH_UNIQUE_COLLISION_BIT
+                cg[2] |= FETCH_BASE_COLLISION_BIT
                 cs.set_collision_groups(cg)
 
         self.torso_lift_link: Link = sapien_utils.get_obj_by_name(
